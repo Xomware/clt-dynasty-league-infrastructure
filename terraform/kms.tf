@@ -1,3 +1,25 @@
+# DEPRECATED — retained deliberately, do not delete yet.
+#
+# The site bucket no longer encrypts NEW objects with this key; it uses SSE-S3
+# (see web_hosting.tf). But every object written before that change is still
+# encrypted with this CMK, and an S3 object encrypted with a deleted key is
+# unrecoverable. Deleting this now would take the site down.
+#
+# Removal sequence:
+#   1. This change lands. New uploads are AES256.
+#   2. Redeploy the frontend. `aws s3 sync --delete` rewrites every object,
+#      so the whole bucket becomes AES256.
+#   3. Confirm nothing is left on the old key:
+#        aws s3api list-objects-v2 --bucket clt.dynasty.xomware.com \
+#          --query 'Contents[].Key' --output text | while read k; do
+#            aws s3api head-object --bucket clt.dynasty.xomware.com --key "$k" \
+#              --query 'ServerSideEncryption' --output text; done | sort -u
+#      Expect AES256 only.
+#   4. Only then delete these three resources. Saves ~$1/month.
+#
+# Worth doing across the estate: 15 customer-managed keys exist and KMS billed
+# $10.51 in August, most of it encrypting publicly-served website assets.
+
 # CMK for the site bucket.
 #
 # The key policy is a SEPARATE aws_kms_key_policy resource rather than an

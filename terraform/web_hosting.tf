@@ -11,8 +11,16 @@ module "web" {
   zone_id     = data.aws_route53_zone.web_zone.zone_id
   tags        = local.standard_tags
 
-  # S3
-  kms_key_arn = aws_kms_alias.web_app.target_key_arn
+  # S3 — no CMK.
+  #
+  # This bucket holds a compiled Angular app that CloudFront serves to the
+  # public internet. Encrypting public files with a customer-managed key buys
+  # no confidentiality; it costs $1/month for the key plus a KMS request on
+  # object reads, and it forces the dependency cycle documented in kms.tf.
+  #
+  # Empty string makes the module fall back to SSE-S3 (AES256): still
+  # encrypted at rest, AWS-managed, free.
+  kms_key_arn = ""
 
   # CloudFront
   waf_acl_arn               = data.aws_ssm_parameter.shared_cloudfront_waf_arn.value
