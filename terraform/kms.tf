@@ -1,24 +1,36 @@
 # DEPRECATED — retained deliberately, do not delete yet.
 #
 # The site bucket no longer encrypts NEW objects with this key; it uses SSE-S3
-# (see web_hosting.tf). But every object written before that change is still
-# encrypted with this CMK, and an S3 object encrypted with a deleted key is
-# unrecoverable. Deleting this now would take the site down.
+# (see web_hosting.tf). But objects encrypted with this CMK are unrecoverable
+# once it is deleted, so removing it too early takes the site down or destroys
+# the ability to roll back.
+#
+# THE VERSIONING TRAP. This bucket is versioned. After the switch to AES256
+# and a redeploy, all 56 CURRENT objects were AES256 — but 591 versions
+# existed, and the noncurrent ones were still aws:kms. A check based on
+# `list-objects-v2` only sees current objects and would have passed with ~535
+# KMS-encrypted versions still present. Deleting the key at that point would
+# have silently destroyed every rollback target.
 #
 # Removal sequence:
-#   1. This change lands. New uploads are AES256.
-#   2. Redeploy the frontend. `aws s3 sync --delete` rewrites every object,
-#      so the whole bucket becomes AES256.
-#   3. Confirm nothing is left on the old key:
-#        aws s3api list-objects-v2 --bucket clt.dynasty.xomware.com \
-#          --query 'Contents[].Key' --output text | while read k; do
-#            aws s3api head-object --bucket clt.dynasty.xomware.com --key "$k" \
-#              --query 'ServerSideEncryption' --output text; done | sort -u
-#      Expect AES256 only.
-#   4. Only then delete these three resources. Saves ~$1/month.
+#   1. Bucket switched to AES256 (done).
+#   2. Redeploy so current objects are rewritten (done).
+#   3. Wait for noncurrent versions to age out. The module's lifecycle rule
+#      keeps the latest 3 versions, so roughly three more deploys clears them.
+#   4. Verify across ALL VERSIONS, not just current objects:
+#        aws s3api list-object-versions --bucket clt.dynasty.xomware.com \
+#          --query 'Versions[].[Key,VersionId]' --output text |
+#        while read k v; do
+#          aws s3api head-object --bucket clt.dynasty.xomware.com \
+#            --key "$k" --version-id "$v" \
+#            --query 'ServerSideEncryption' --output text
+#        done | sort -u
+#      Expect AES256 only. If aws:kms appears, the key is still load-bearing.
+#   5. Only then delete these three resources. Saves ~$1/month.
 #
 # Worth doing across the estate: 15 customer-managed keys exist and KMS billed
-# $10.51 in August, most of it encrypting publicly-served website assets.
+# $10.51 in August, most of it encrypting publicly-served website assets. Each
+# one needs this same sequence, versioning trap included.
 
 # CMK for the site bucket.
 #
