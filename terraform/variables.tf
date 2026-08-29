@@ -69,3 +69,20 @@ variable "retain_on_delete" {
   type        = bool
   default     = false
 }
+
+# Read off the repo, never built from a name:
+#   gh api /repos/<org>/<repo>/actions/oidc/customization/sub -q .sub_claim_prefix
+variable "github_infrastructure_subjects" {
+  description = "OIDC subject prefixes for this infrastructure repository"
+  type        = list(string)
+  default = [
+    "repo:Xomware/clt-dynasty-league-infrastructure",
+    "repo:Xomware@263047999/clt-dynasty-league-infrastructure@1345503361",
+  ]
+}
+
+variable "default_branch" {
+  description = "Branch a push to which is allowed to run terraform apply"
+  type        = string
+  default     = "master"
+}
