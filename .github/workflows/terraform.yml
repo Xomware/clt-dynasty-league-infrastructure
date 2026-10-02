@@ -3,90 +3,20 @@ name: Terraform
 on:
   push:
     branches: [master]
-    paths: ['terraform/**']
+    paths: ['terraform/**', '.github/workflows/terraform.yml']
   pull_request:
     branches: [master]
-    paths: ['terraform/**']
+    paths: ['terraform/**', '.github/workflows/terraform.yml']
   workflow_dispatch:
-
-concurrency:
-  group: terraform-clt-dynasty-league-infrastructure
-  cancel-in-progress: false
 
 permissions:
   contents: read
   pull-requests: write
-  id-token: write # mint the OIDC token traded for the plan/apply role
-
-env:
-  TF_DIR: terraform
-  AWS_REGION: us-east-1
+  id-token: write
 
 jobs:
   terraform:
-    name: Terraform
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{ env.TF_DIR }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: "1.10.5"
-
-      # Read-only for plans, admin only for an apply on master. Selecting the
-      # role by event means a pull request cannot assume the role that mutates,
-      # regardless of what the workflow later does.
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.AWS_TERRAFORM_APPLY_ROLE_ARN || secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Validate
-        run: terraform validate
-
-      - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color -input=false
-        continue-on-error: true
-
-      - name: Post Plan to PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
-
-            <details><summary>Show Plan</summary>
-
-            \`\`\`terraform
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
-
-            </details>
-
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
-
-      - name: Plan Status
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
-
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        run: terraform apply -auto-approve -input=false
+    uses: Xomware/github-actions/.github/workflows/terraform.yml@v1
+    with:
+      app: clt-dynasty
+      terraform-version: "1.10.5"
